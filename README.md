@@ -1,2 +1,4 @@
 # local-rag
-Custom local rag setup with Qdrant &amp; Llamafile
+Custom local rag setup with Qdrant & Llamafile
+
+
