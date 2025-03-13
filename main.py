@@ -49,7 +49,7 @@ def add_collection_to_vector_db(
     vector_db: QdrantClient, encoder: SentenceTransformer, collection_name: str
 ):
     """Create a collection in the vector database where to upload embedded data later.
-    Set default distance parameters to cosine. Deprecated: use `create_collection` instead.
+    Set default distance parameters to cosine.
 
     Args:
         vector_db (QdrantClient): vector database client.
@@ -59,7 +59,7 @@ def add_collection_to_vector_db(
     Returns:
         int: 0 if successful.
     """
-    vector_db.recreate_collection(
+    vector_db.create_collection(
         collection_name=collection_name,
         vectors_config=models.VectorParams(
             size=encoder.get_sentence_embedding_dimension(),  # vector size is defined by used model
@@ -75,7 +75,7 @@ def vectorize_data(
     data: List[Dict],
     encoder: SentenceTransformer,
 ):
-    """Serialize data into the vector database.
+    """Serialize data into the vector database.Each data point is represented as a vector.
 
     Args:
         vector_db (QdrantClient): vector database client.
@@ -86,17 +86,33 @@ def vectorize_data(
     Returns:
         int: 0 if successful.
     """
-    # deprecated: upload using "Points" instead of "Records" (see Qdrant docs)
-    vector_db.upload_records(
+    vector_db.upload_points(
         collection_name=target_collection_name,
-        records=[
-            models.Record(
-                id=idx, vector=encoder.encode(doc["notes"]).tolist(), payload=doc
+        points=[
+            models.PointStruct(
+                id=index,
+                vector=encoder.encode(content["notes"]).tolist(),
+                payload=content,
             )
-            for idx, doc in enumerate(data)
+            for index, content in enumerate(data)
         ],
     )
     return 0
+
+
+def check_vector_db(
+    vector_db: QdrantClient, collection_name: str, filter: str = None, value: str = None
+) -> models.CollectionInfo:
+    """Check if data is stored in the vector database.
+
+    Args:
+        vector_db (QdrantClient): vector database client.
+        collection_name (str): name of the collection to search in.
+
+    Returns:
+        check (CollectionInfo): number of points in the collection.
+    """
+    return vector_db.get_collection(collection_name)
 
 
 def search_vector_db(
@@ -105,8 +121,8 @@ def search_vector_db(
     encoder: SentenceTransformer,
     query: str,
     return_limit: int = 2,
-):
-    """Search the vector database for similar embeddings.
+) -> List[models.ScoredPoint]:
+    """Search the vector database for similar embeddings. Deprecated use `query_points` instead of `search`.
 
     Args:
         vector_db (QdrantClient): vector database client.
@@ -116,7 +132,7 @@ def search_vector_db(
         return_limit (int, optional): number of results to return. Defaults to 2.
 
     Returns:
-        list: list of hits.
+        list: list of ScoredPoint objects.
     """
     hits = vector_db.search(
         collection_name=collection_name,
@@ -126,33 +142,26 @@ def search_vector_db(
     return hits
 
 
-def scroll_vector_db(
-    vector_db: QdrantClient, collection_name: str, filter: str, value: str
-):
-    """Naive check if embeddings are stored in the vector database.
-    Deprecated: use `collection_exists` instead.
+def pprint_results(hits: List[models.ScoredPoint]):
+    """Pretty print search results.
 
     Args:
-        vector_db (QdrantClient): vector database client.
-        collection_name (str): name of the collection to search in.
-        filter (str): key field condition to filter by.
-        value (str): value to filter by.
-
-    Returns:
-        list: list of results. Limits to 3 results.
+        hits (List[ScoredPoint]): search results.
     """
-    results = vector_db.scroll(
-        collection_name=collection_name,
-        scroll_filter=models.Filter(
-            must=[
-                models.FieldCondition(key=filter, match=models.MatchValue(value=value)),
-            ]
-        ),
-        limit=3,
-        with_payload=True,
-        with_vectors=False,
-    )
-    return results[0]
+    print("\n")
+    print("-" * 130)
+    print("Search results:", "\n")
+    [
+        print(
+            hit.payload["name"],
+            hit.payload["region"],
+            "score:",
+            str(round(float(hit.score), 3)),
+        )
+        for hit in hits
+    ]
+    print("-" * 130)
+    print("\n")
 
 
 if __name__ == "__main__":
@@ -171,19 +180,12 @@ if __name__ == "__main__":
     # serialize data into vector database
     vectorize_data(vdb, "top_wines", data, encoder)
 
-    # check if embeddings are properly stored
-    if scroll_vector_db(vdb, "top_wines", "variety", "Red Wine"):
-        print("Data have been properly stored.")
+    # check if data is stored in the vector database
+    checkpoints = check_vector_db(vdb, "top_wines")
+    print(f"Collection 'top_wines' contains {checkpoints.points_count} points.")
 
-        # search locally
-        hits = search_vector_db(vdb, "top_wines", encoder, "A historic French wine", 3)
+    # search locally
+    hits = search_vector_db(vdb, "top_wines", encoder, "A historic French wine", 3)
 
-        # print results
-        print("-" * 90)
-        print("\n", "Search results:", "\n")
-        for hit in hits:
-            print(hit.payload["name"], "score:", hit.score)
-        print("-" * 90)
-
-    else:
-        print("No data found.")
+    # print results
+    pprint_results(hits)
