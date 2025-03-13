@@ -175,17 +175,21 @@ if __name__ == "__main__":
     vdb = create_vector_db(":memory:")
 
     # create the collection
-    add_collection_to_vector_db(vdb, encoder, "top_wines")
+    new_collection_name = "top_wines"
+    add_collection_to_vector_db(vdb, encoder, new_collection_name)
 
     # serialize data into vector database
-    vectorize_data(vdb, "top_wines", data, encoder)
+    vectorize_data(vdb, new_collection_name, data, encoder)
 
     # check if data is stored in the vector database
-    checkpoints = check_vector_db(vdb, "top_wines")
-    print(f"Collection 'top_wines' contains {checkpoints.points_count} points.")
+    checkpoints = check_vector_db(vdb, new_collection_name)
+    print(
+        f"Collection {new_collection_name} contains {checkpoints.points_count} points."
+    )
 
     # search locally
-    hits = search_vector_db(vdb, "top_wines", encoder, "A historic French wine", 3)
+    user_query = "A historic French wine"
+    hits = search_vector_db(vdb, new_collection_name, encoder, user_query, 3)
 
     # print results
     pprint_results(hits)
