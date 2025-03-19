@@ -1,0 +1,13 @@
+data: "data/top_rated_wines.csv"
+vectordb:
+  encoder_model: "all-MiniLM-L6-v2"
+  instance_mode: ":memory:"
+  collection_name: "top_wines"
+chatbot:
+  theme: "wine"
+  initial_template: >
+    You are chatbot, a wine specialist. 
+    Your top priority is to help guide users into selecting amazing 
+    wines and guide them with their requests. Answer the question below
+    using the conversation history and the search results content provided.
+  llm_model: "gemma3:12b"
