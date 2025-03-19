@@ -14,4 +14,4 @@ Custom local rag setup with Qdrant & Llamafile.
 
 * `top_rated_wines.csv` dataset
 * `notebook.ipynb` building the entire reasoning
-* `main.py` for factored version of the code
+* `code/` repo for factored version of the code
