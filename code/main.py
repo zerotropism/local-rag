@@ -1,3 +1,4 @@
+import json
 import yaml
 import pandas as pd
 from typing import List, Dict
@@ -78,7 +79,7 @@ def pprint_results(user_query: str, hits: List):
     print("\n")
 
 
-def setup_chatbot(conf: Dict, user_query: str, hits: List):
+def setup_chatbot(conf: Dict, vector_db: VectorDB):
     """Setup the chatbot.
 
     Args:
@@ -89,13 +90,18 @@ def setup_chatbot(conf: Dict, user_query: str, hits: List):
     Returns:
         Chatbot: chatbot object.
     """
+    # check if chatbot configurations are provided
+    if not conf:
+        print(
+            "Chatbot configurations not found. Please provide chatbot configurations in the config file."
+        )
+        return
     # instantiate the chatbot object
     bot = Chatbot(
-        question=user_query,
-        search=hits,
         theme=conf.get("theme"),
         template=conf.get("initial_template"),
         model=conf.get("llm_model"),
+        rag=vector_db,
     )
     return bot
 
@@ -107,20 +113,11 @@ def main():
     # setup vector db
     vdb = setup_vector_db(conf)
 
-    # collect user query
-    user_query = input("Enter your query: ")
-
-    # search locally
-    hits = vdb.search_vector_db(query=user_query, return_limit=3)
-
-    # print results
-    pprint_results(user_query, hits)
-
     # setup chatbot
-    bot = setup_chatbot(conf.get("chatbot", {}), user_query, hits)
+    bot = setup_chatbot(conf.get("chatbot", {}), vdb)
 
     # start conversation
-    bot.start_conversation()
+    bot.handle_conversation()
 
 
 if __name__ == "__main__":
