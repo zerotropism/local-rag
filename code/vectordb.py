@@ -114,22 +114,50 @@ class VectorDB:
                 "The vectordb has not been set up successfully: no data points found."
             )
 
-    def search_vector_db(
-        self, query: str, return_limit: int = 2
-    ) -> List[models.ScoredPoint]:
-        """Search the vector database for similar embeddings. Deprecated use `query_points` instead of `search`.
+    def dict_to_indented_text(self, nested_dict: Dict) -> str:
+        """Convert a nested dictionary to an indented text format.
 
         Args:
-            collection_name (str): name of the collection to search in.
+            nested_dict (Dict): nested dictionary to convert.
+
+        Returns:
+            result (str): indented text representation of the dictionary.
+        """
+        result = []
+        for key, value in nested_dict.items():
+            result.append(f"{key}:")
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    result.append(f"\t{sub_key}: {sub_value}")
+        return "\n".join(result)
+
+    def search_vector_db(
+        self, query: str, return_limit: int = 2, text_output: bool = False
+    ) -> str | Dict:
+        """Search the vector database for similar embeddings and returns a dictionnary of results that
+        can optinally be serialized as plain text. Deprecated use `query_points` instead of `search`.
+
+        Args:
             query (str): input user query.
             return_limit (int, optional): number of results to return. Defaults to 2.
 
         Returns:
-            list: list of ScoredPoint objects.
+            str: indented text representation of the search results if `text_output` is True.
+            Dict: dictionary of search results.
         """
-        hits = self.vector_db.search(
-            collection_name=self.collection_name,
-            query_vector=self.encoder.encode(query).tolist(),
-            limit=return_limit,
-        )
-        return hits
+        search_results = {
+            hit.payload["name"]: {
+                "score": str(round(float(hit.score), 3)),
+                "region": hit.payload["region"],
+                "notes": hit.payload["notes"],
+            }
+            for hit in self.vector_db.search(
+                collection_name=self.collection_name,
+                query_vector=self.encoder.encode(query).tolist(),
+                limit=return_limit,
+            )
+        }
+        if text_output:
+            return self.dict_to_indented_text(search_results)
+        else:
+            return search_results
