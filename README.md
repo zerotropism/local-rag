@@ -13,5 +13,5 @@ Custom local rag setup with Qdrant & Llamafile.
 ## Content
 
 * `top_rated_wines.csv` dataset
-* `notebook.ipynb` building the entire reasoning
+* `notebook.ipynb` building the initial reasoning
 * `code/` repo for factored version of the code
