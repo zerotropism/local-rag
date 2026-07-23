@@ -62,7 +62,8 @@ class Chatbot:
                 self._search_results,
                 "\n\n",
             )
-            # set user prompt as a concatenation of initial template, conversation history, the search results & user input
+            # set user prompt as a concatenation of initial template, conversation history,
+            # the search results & user input
             self._prompt = ChatPromptTemplate.from_template(
                 self._template
                 + f"""
