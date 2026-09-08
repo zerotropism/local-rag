@@ -1,10 +1,12 @@
-from functools import wraps
 import logging
+from functools import wraps
 
 # logger configuration
 logging.basicConfig(
     level=logging.ERROR,
-    format="%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(lineno)d - %(message)s : ",
+    format=(
+        "%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(lineno)d - %(message)s : "
+    ),
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)

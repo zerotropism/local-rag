@@ -1,13 +1,12 @@
-from typing import List, Dict, Union
 from decorators import handle_exception
-from qdrant_client import models, QdrantClient
+from qdrant_client import QdrantClient, models
 from sentence_transformers import SentenceTransformer
 
 
 class VectorDB:
     def __init__(
         self,
-        datapoints: List[Dict],
+        datapoints: list[dict],
         encoder_model: str = "all-MiniLM-L6-v2",
         instance_mode: str = ":memory:",
         collection_name: str = "new_collection",
@@ -15,9 +14,12 @@ class VectorDB:
         """Initialize the VectorDB class.
         Args:
             datapoints (List[Dict]): List of dictionaries containing data points.
-            encoder_model (str, optional): Name of the encoder model to be used. Defaults to "all-MiniLM-L6-v2".
-            instance_mode (str, optional): Mode for the QdrantClient instance. Defaults to ":memory:".
-            collection_name (str, optional): Name of the collection in the vector database. Defaults to "new_collection".
+            encoder_model (str, optional): Name of the encoder model.
+                Defaults to "all-MiniLM-L6-v2".
+            instance_mode (str, optional): Mode for the QdrantClient instance.
+                Defaults to ":memory:".
+            collection_name (str, optional): Name of the collection in the
+                vector database. Defaults to "new_collection".
         """
         self._encoder_model = encoder_model
         self._instance_mode = instance_mode
@@ -115,7 +117,8 @@ class VectorDB:
     def check_vector_db(self) -> models.CollectionInfo:
         """Check if data is stored in the vector database.
         Returns:
-            models.CollectionInfo: Collection information including number of corresponding datapoints.
+            models.CollectionInfo: Collection information including number of
+                corresponding datapoints.
         """
         self._checkpoints = self._vector_db.get_collection(self._collection_name)
         return self._checkpoints
@@ -139,16 +142,15 @@ class VectorDB:
         if self._checkpoints.points_count:
             print("The vectordb has been set up successfully.")
             print(
-                f"Collection '{self._collection_name}' contains {self._checkpoints.points_count} points."
+                f"Collection '{self._collection_name}' contains "
+                f"{self._checkpoints.points_count} points."
             )
         else:
-            print(
-                "The vectordb has not been set up successfully: no data points found."
-            )
+            print("The vectordb has not been set up successfully: no data points found.")
         return 0
 
     @staticmethod
-    def dict_to_indented_text(nested_dict: Dict) -> str:
+    def dict_to_indented_text(nested_dict: dict) -> str:
         """Convert a nested dictionary to an indented text format.
         Args:
             nested_dict (Dict): Input nested dictionary.
@@ -166,9 +168,10 @@ class VectorDB:
     @handle_exception
     def search_vector_db(
         self, query: str, return_limit: int = 2, text_output: bool = False
-    ) -> Union[str, Dict]:
-        """Search the vector database for similar embeddings and returns a dictionnary of results that
-        can optinally be serialized as plain text. Deprecated use `query_points` instead of `search`.
+    ) -> str | dict:
+        """Search the vector database for similar embeddings and return a
+        dictionary of results that can optionally be serialized as plain text.
+        Deprecated: use `query_points` instead of `search`.
         Args:
             query (str): input user query.
             return_limit (int, optional): number of results to return. Defaults to 2.

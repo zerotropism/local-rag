@@ -1,7 +1,6 @@
-from vectordb import VectorDB
-from langchain_ollama import OllamaLLM
-from langchain_core.prompts import ChatPromptTemplate
+import ollama
 from decorators import handle_exception
+from vectordb import VectorDB
 
 
 class Chatbot:
@@ -20,21 +19,20 @@ class Chatbot:
             rag (VectorDB, optional): Vector database object. Defaults to None.
         """
         self._theme = theme
-        self._llm = OllamaLLM(model=model)
+        self._model = model
         self._rag = rag
         self._template = template
         self._search_results = None
         self._context = ""
         self._prompt = None
-        self._chain = None
 
     @property
-    def theme(self, value: str):
+    def theme(self) -> str:
         """Get the theme of the chatbot
         Args:
             value (str): Theme of the chatbot.
         """
-        self._theme = value
+        return self._theme
 
     @handle_exception
     def handle_conversation(self):
@@ -64,7 +62,7 @@ class Chatbot:
             )
             # set user prompt as a concatenation of initial template, conversation history,
             # the search results & user input
-            self._prompt = ChatPromptTemplate.from_template(
+            self._prompt = (
                 self._template
                 + f"""
             Here is the conversation history: {self._context}
@@ -76,16 +74,11 @@ class Chatbot:
             Answer:
             """
             )
-            # set the chain of response generation
-            self._chain = self._prompt | self._llm
-            # invoke the chain of response generation
-            response = self._chain.invoke(
-                {
-                    "context": self._context,
-                    "search_results": str(self._search_results),
-                    "question": user_input,
-                }
-            )
+            # call the ollama API to get the response from the model
+            response = ollama.chat(
+                model=self._model,
+                messages=[{"role": "user", "content": self._prompt}],
+            )["message"]["content"]
             # print the response to user
             print("Chatbot:", response)
             # update the conversation history as context for next iteration
