@@ -1,23 +1,24 @@
-import yaml
+from pathlib import Path
+
 import pandas as pd
-from typing import List, Dict
-from vectordb import VectorDB
+import yaml
 from chatbot import Chatbot
+from vectordb import VectorDB
 
 
-def load_configurations(path: str = "code/config.yaml") -> Dict:
+def load_configurations(path: str = "code/config.yaml") -> dict:
     """Load configurations from a YAML file.
     Args:
         path (str, optional): path to the YAML file. Defaults to "config.yaml".
     Returns:
         Dict: configurations as a dictionary.
     """
-    with open(path, "r") as file:
+    with Path(path).open() as file:
         conf = yaml.safe_load(file)
     return conf
 
 
-def load_data(path: str) -> List[Dict]:
+def load_data(path: str) -> list[dict]:
     """Load data from a CSV file.
     Returns:
         List[Dict]: serialized data as a list of dictionaries.
@@ -29,7 +30,7 @@ def load_data(path: str) -> List[Dict]:
     return data
 
 
-def setup_vector_db(conf: Dict) -> VectorDB:
+def setup_vector_db(conf: dict) -> VectorDB:
     """Load the vector database.
     Args:
         conf (Dict): vector db related configurations.
@@ -53,7 +54,7 @@ def setup_vector_db(conf: Dict) -> VectorDB:
     return vdb
 
 
-def setup_chatbot(conf: Dict, vector_db: VectorDB):
+def setup_chatbot(conf: dict, vector_db: VectorDB):
     """Setup the chatbot.
     Args:
         conf (Dict): chatbot related configurations.
@@ -65,7 +66,8 @@ def setup_chatbot(conf: Dict, vector_db: VectorDB):
     # check if chatbot configurations are provided
     if not conf:
         print(
-            "Chatbot configurations not found. Please provide chatbot configurations in the config file."
+            "Chatbot configurations not found. "
+            "Please provide chatbot configurations in the config file."
         )
         return
     # instantiate the chatbot object

@@ -3,3 +3,6 @@ line-length = 100
 
 [lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "PTH"]
+
+[lint.per-file-ignores]
+"notebook.ipynb" = ["E501"]
