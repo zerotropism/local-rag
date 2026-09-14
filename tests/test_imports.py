@@ -2,7 +2,16 @@
 
 import pytest
 
-MODULES = ["models", "protocols", "embedders", "stores"]
+MODULES = [
+    "models",
+    "protocols",
+    "embedders",
+    "stores",
+    "corpus",
+    "config",
+    "chatbot",
+    "cli",
+]
 
 
 @pytest.mark.parametrize("name", MODULES)

@@ -1,6 +1,6 @@
 data:
   path: "data/top_rated_wines.csv"
-  text_field: "notes"
+  text_field: ["name", "region", "variety", "notes"]
   required_fields: ["variety"]
 vectordb:
   encoder_model: "all-MiniLM-L6-v2"
@@ -9,8 +9,8 @@ vectordb:
 chatbot:
   theme: "wine"
   initial_template: >
-    You are chatbot, a wine specialist.
-    Your top priority is to help guide users into selecting amazing
-    wines and guide them with their requests. Answer the question below
-    using the conversation history and the search results content provided.
+    You are a wine specialist. Answer using only the search results provided below.
+    Never mention a wine that is not in those results.
+    If the results do not contain a suitable wine, say so plainly and describe
+    what is closest among them.
   llm_model: "llama3.2:3b"

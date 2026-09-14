@@ -20,7 +20,7 @@ class SentenceTransformerEmbedder:
 
     @property
     def dimension(self) -> int:
-        return self.model.get_sentence_embedding_dimension()
+        return self.model.get_embedding_dimension()
 
     def encode(self, texts: Sequence[str]) -> list[list[float]]:
         return self.model.encode(list(texts)).tolist()

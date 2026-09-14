@@ -49,3 +49,18 @@ def test_a_missing_column_is_reported(corpus) -> None:
 def test_a_missing_file_is_reported(tmp_path) -> None:
     with pytest.raises(FileNotFoundError):
         load_csv(tmp_path / "nope.csv", text_field="notes")
+
+
+def test_a_single_field_is_prefixed_with_its_name(corpus) -> None:
+    documents = load_csv(corpus, text_field="notes")
+    assert documents[0].text.startswith("notes: ")
+
+
+def test_several_fields_are_concatenated(corpus) -> None:
+    """Embedding only the free-text column leaves metadata unsearchable."""
+    documents = load_csv(corpus, text_field=["name", "region", "notes"])
+    text = documents[0].text
+
+    assert "name: Shiraz 2004" in text
+    assert "region: Barossa, Australia" in text
+    assert "Rainfall kept the vines" in text
