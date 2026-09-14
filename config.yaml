@@ -1,0 +1,16 @@
+data:
+  path: "data/top_rated_wines.csv"
+  text_field: ["name", "region", "variety", "notes"]
+  required_fields: ["variety"]
+vectordb:
+  encoder_model: "all-MiniLM-L6-v2"
+  location: ":memory:"
+  collection_name: "top_wines"
+chatbot:
+  theme: "wine"
+  initial_template: >
+    You are a wine specialist. Answer using only the search results provided below.
+    Never mention a wine that is not in those results.
+    If the results do not contain a suitable wine, say so plainly and describe
+    what is closest among them.
+  llm_model: "llama3.2:3b"

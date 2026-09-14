@@ -1,16 +1,19 @@
-"""Smoke tests: every module in code/ must import cleanly."""
-
-import sys
-from pathlib import Path
+"""Smoke test: the package modules import cleanly."""
 
 import pytest
 
-CODE = Path(__file__).resolve().parent.parent / "code"
-sys.path.insert(0, str(CODE))
-
-MODULES = ["chatbot", "decorators", "main", "vectordb"]
+MODULES = [
+    "models",
+    "protocols",
+    "embedders",
+    "stores",
+    "corpus",
+    "config",
+    "chatbot",
+    "cli",
+]
 
 
 @pytest.mark.parametrize("name", MODULES)
 def test_module_imports(name: str) -> None:
-    __import__(name)
+    __import__(f"local_rag.{name}")
