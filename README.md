@@ -34,6 +34,9 @@ data:
   path: "data/top_rated_wines.csv"
   text_field: ["name", "region", "variety", "notes"]
   required_fields: ["variety"]
+evaluation:
+  path: "data/eval.jsonl"
+  id_field: "name"
 vectordb:
   encoder_model: "all-MiniLM-L6-v2"
   location: ":memory:"
@@ -64,9 +67,12 @@ columns your corpus carries.
 ```
 src/local_rag/
 ├── models.py      Document (text + payload) and SearchHit
-├── protocols.py   Embedder and VectorStore
+├── protocols.py   Embedder, Retriever and VectorStore
 ├── embedders.py   SentenceTransformerEmbedder
 ├── stores.py      QdrantStore
+├── lexical.py     BM25Index, in memory
+├── hybrid.py      HybridRetriever: reciprocal rank fusion of several retrievers
+├── evaluation.py  recall@k and MRR per retriever and kind of question, local-rag-eval
 ├── corpus.py      CSV to Documents
 ├── config.py      YAML loading, root-relative paths
 ├── chatbot.py     retrieval, prompt building, conversation
@@ -76,22 +82,60 @@ src/local_rag/
 `Document.payload` is what keeps the store corpus-agnostic: the store embeds `text` and returns
 `payload` untouched, so it never learns that a row has a `region` or a `variety`.
 
-`Chatbot` takes a `VectorStore` and a chat callable, both injected. That is what lets the
+`Chatbot` takes a `Retriever` and a chat callable, both injected. That is what lets the
 conversation tests run with a fake store and a fake model, asserting on the prompt that gets
 built rather than on a live answer.
 
 ## Retrieval quality
 
-Search is dense-only: the question is embedded and compared by cosine similarity. On the wine
-catalogue this retrieves plausible neighbours but discriminates poorly — a query for a white
-wine from one region can return a red one from the same region, because the colour is a weak
-signal inside two hundred words of tasting notes.
+The chatbot searches by vectors only for now: the question is embedded and compared by cosine
+similarity. On the wine catalogue this retrieves plausible neighbours but discriminates poorly
+on names and places, which a 384-dimension embedding of two hundred words of tasting notes
+blurs. The prompt compensates: the model answers only from the retrieved documents and says so
+when none fit.
 
-Hybrid search (BM25 combined with vectors) and a recall@k evaluation set are the next step.
-Until there is a measurement, tuning the retrieval would be guesswork.
+Three retrievers can be compared on the same documents:
 
-The prompt compensates in the meantime: the model is instructed to answer only from the
-retrieved documents and to say so when none fit, rather than answering from its own knowledge.
+| Retriever | How it ranks |
+|---|---|
+| `dense` | cosine similarity between embeddings, in Qdrant |
+| `lexical` | BM25 over the same text, accents and case ignored |
+| `hybrid` | reciprocal rank fusion of both: each ranks its first 50, a document scores the sum of `1 / (60 + rank)` |
+
+## Evaluation
+
+`data/eval.jsonl` holds 30 questions, each with the wines that answer it and a kind:
+
+| Kind | Questions | What it tests | Relevant wines |
+|---|---|---|---|
+| `name` | 10 | producer and wine names, as a customer types them | every wine whose name contains the producer and wine named, all vintages |
+| `notes` | 10 | tasting vocabulary taken from the notes | the described wine, plus any other row with the same notes (60 % of words or more shared) |
+| `paraphrase` | 10 | the same kind of description, reworded | as for `notes`; each question shares no content word with its wine, which leaves only meaning to match on |
+
+Relevance is by `name` (`evaluation.id_field` in `config.yaml`), so duplicate rows of a wine
+count once. Each question reports recall at 1, 5 and 10 (share of its relevant wines found) and
+its reciprocal rank; results are averaged per kind and overall.
+
+```bash
+uv run local-rag-eval                          # the three retrievers; downloads the encoder once
+uv run local-rag-eval --retrievers lexical     # BM25 only: no model, a few seconds
+```
+
+Behind a TLS-inspecting proxy, add `--system-certs`. Each question's outcome, with its ranked
+wines, goes to `evaluation/outcomes-<time>.jsonl`, and the table to `summary-<time>.md`.
+
+BM25 on the bundled questions:
+
+| Retriever | Questions | n | Recall@1 | Recall@5 | Recall@10 | MRR |
+|---|---|---|---|---|---|---|
+| lexical | all | 30 | 0.472 | 0.632 | 0.644 | 0.667 |
+| lexical | name | 10 | 0.566 | 0.896 | 0.933 | 1.000 |
+| lexical | notes | 10 | 0.850 | 1.000 | 1.000 | 1.000 |
+| lexical | paraphrase | 10 | 0.000 | 0.000 | 0.000 | 0.000 |
+
+Recall@1 on `name` is capped below 1: those questions have several relevant vintages. The
+paraphrases score 0 by construction. The questions were written for this evaluation by one
+author: they compare the retrievers with each other, not with real users.
 
 ## Tests
 
@@ -100,7 +144,8 @@ uv run pytest
 ```
 
 No model download, no Qdrant server, no Ollama: the store tests use a deterministic toy
-embedder, the chatbot tests a fake store and a fake chat backend.
+embedder, the chatbot tests a fake store and a fake chat backend, and the evaluation tests run
+BM25 on the bundled questions.
 
 ## Dependencies
 
