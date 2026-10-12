@@ -21,6 +21,15 @@ class Embedder(Protocol):
 
 
 @runtime_checkable
+class Retriever(Protocol):
+    """Anything that answers a query with ranked hits: a vector store, BM25, or both fused."""
+
+    def search(self, query: str, limit: int = 3) -> list[SearchHit]:
+        """Return the closest documents, best first."""
+        ...
+
+
+@runtime_checkable
 class VectorStore(Protocol):
     """Holds vectors and answers queries. Swap Qdrant for another backend."""
 

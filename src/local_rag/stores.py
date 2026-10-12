@@ -51,7 +51,10 @@ class QdrantStore:
             query=self._embedder.encode([query])[0],
             limit=limit,
         )
-        return [SearchHit(score=float(p.score), payload=p.payload or {}) for p in response.points]
+        return [
+            SearchHit(score=float(p.score), payload=p.payload or {}, id=int(p.id))
+            for p in response.points
+        ]
 
     def count(self) -> int:
         return self._client.get_collection(self._collection_name).points_count or 0

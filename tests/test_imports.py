@@ -11,6 +11,9 @@ MODULES = [
     "config",
     "chatbot",
     "cli",
+    "lexical",
+    "hybrid",
+    "evaluation",
 ]
 
 
