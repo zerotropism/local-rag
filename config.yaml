@@ -2,6 +2,9 @@ data:
   path: "data/top_rated_wines.csv"
   text_field: ["name", "region", "variety", "notes"]
   required_fields: ["variety"]
+evaluation:
+  path: "data/eval.jsonl"
+  id_field: "name"
 vectordb:
   encoder_model: "all-MiniLM-L6-v2"
   location: ":memory:"

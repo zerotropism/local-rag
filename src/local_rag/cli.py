@@ -6,27 +6,37 @@ from local_rag.chatbot import Chatbot
 from local_rag.config import load_config, resolve
 from local_rag.corpus import load_csv
 from local_rag.embedders import SentenceTransformerEmbedder
+from local_rag.models import Document
 from local_rag.protocols import VectorStore
 from local_rag.stores import QdrantStore
 
 
-def build_store(config: dict) -> VectorStore:
-    """Load the corpus and index it, reporting how many documents made it in."""
+def load_documents(config: dict) -> list[Document]:
     data = config["data"]
-    vectordb = config["vectordb"]
-
-    documents = load_csv(
+    return load_csv(
         resolve(data["path"]),
         text_field=data["text_field"],
         required_fields=data.get("required_fields", ()),
     )
+
+
+def build_dense_store(config: dict, documents: list[Document]) -> QdrantStore:
+    vectordb = config["vectordb"]
     store = QdrantStore(
         SentenceTransformerEmbedder(vectordb["encoder_model"]),
         location=vectordb.get("location", ":memory:"),
         collection_name=vectordb["collection_name"],
     )
+    store.index(documents)
+    return store
+
+
+def build_store(config: dict) -> VectorStore:
+    """Load the corpus and index it, reporting how many documents made it in."""
+    documents = load_documents(config)
     print(f"Indexing {len(documents)} documents...")
-    print(f"Collection '{vectordb['collection_name']}' holds {store.index(documents)} points.")
+    store = build_dense_store(config, documents)
+    print(f"Collection '{config['vectordb']['collection_name']}' holds {store.count()} points.")
     return store
 
 
@@ -40,6 +50,13 @@ def build_chatbot(config: dict, store: VectorStore) -> Chatbot:
     )
 
 
+def use_system_certificates() -> None:
+    """Verify TLS against the OS trust store, for model downloads behind a TLS-inspecting proxy."""
+    import truststore
+
+    truststore.inject_into_ssl()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Local RAG chatbot")
     parser.add_argument("--config", default=None, help="Path to the YAML configuration")
@@ -51,9 +68,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.system_certs:
-        import truststore
-
-        truststore.inject_into_ssl()
+        use_system_certificates()
 
     config = load_config(args.config)
     build_chatbot(config, build_store(config)).run()

@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 import ollama
 
 from local_rag.models import SearchHit
-from local_rag.protocols import VectorStore
+from local_rag.protocols import Retriever
 
 DEFAULT_LIMIT = 3
 
@@ -28,11 +28,11 @@ def format_hits(hits: Sequence[SearchHit]) -> str:
 
 
 class Chatbot:
-    """Holds the conversation history and asks the store before asking the model."""
+    """Holds the conversation history and asks the retriever before asking the model."""
 
     def __init__(
         self,
-        store: VectorStore,
+        store: Retriever,
         template: str,
         model: str = "llama3.1",
         theme: str = "",
