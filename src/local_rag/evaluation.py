@@ -15,6 +15,8 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+import ollama
+
 from local_rag.config import load_config, resolve
 from local_rag.hybrid import HybridRetriever
 from local_rag.lexical import BM25Index
@@ -159,26 +161,40 @@ def markdown_table(summaries: Sequence[Summary]) -> str:
     return "\n".join(lines)
 
 
-def build_retrievers(config: dict, names: Sequence[str]) -> dict[str, Retriever]:
-    """The retrievers asked for, over the same documents in the same order."""
+def build_retrievers(
+    config: dict, names: Sequence[str], encoders: Sequence[str]
+) -> dict[str, Retriever]:
+    """The retrievers asked for, over the same documents in the same order.
+
+    BM25 is built once; the dense and hybrid retrievers once per encoder, labelled with it.
+    """
     from local_rag.cli import build_dense_store, load_documents
 
     documents = load_documents(config)
     lexical = BM25Index()
     lexical.index(documents)
-    dense = build_dense_store(config, documents) if {"dense", "hybrid"} & set(names) else None
-    available: dict[str, Callable[[], Retriever]] = {
-        "lexical": lambda: lexical,
-        "dense": lambda: dense,
-        "hybrid": lambda: HybridRetriever([lexical, dense]),
-    }
-    return {name: available[name]() for name in names}
+    retrievers: dict[str, Retriever] = {}
+    if "lexical" in names:
+        retrievers["lexical"] = lexical
+    for encoder in encoders if {"dense", "hybrid"} & set(names) else ():
+        dense = build_dense_store(config, documents, encoder)
+        if "dense" in names:
+            retrievers[f"dense {encoder}"] = dense
+        if "hybrid" in names:
+            retrievers[f"hybrid {encoder}"] = HybridRetriever([lexical, dense])
+    return retrievers
 
 
 def parse(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="local-rag-eval", description=__doc__)
     parser.add_argument("--config", default=None, help="Path to the YAML configuration")
     parser.add_argument("--retrievers", nargs="+", choices=RETRIEVERS, default=list(RETRIEVERS))
+    parser.add_argument(
+        "--encoders",
+        nargs="+",
+        default=None,
+        help="encoders to compare, as backend:model (default: the configured one)",
+    )
     parser.add_argument("--output", type=Path, default=Path("evaluation"))
     parser.add_argument(
         "--system-certs",
@@ -197,7 +213,11 @@ def main(argv: list[str] | None = None) -> None:
     config = load_config(args.config)
     settings = config["evaluation"]
     items = load_eval(resolve(settings["path"]))
-    retrievers = build_retrievers(config, args.retrievers)
+    encoders = args.encoders or [config["vectordb"]["encoder"]]
+    try:
+        retrievers = build_retrievers(config, args.retrievers, encoders)
+    except (ValueError, ollama.ResponseError, ConnectionError) as exc:
+        raise SystemExit(f"error: {exc}") from None
 
     args.output.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -209,7 +229,6 @@ def main(argv: list[str] | None = None) -> None:
 
         outcomes = evaluate(retrievers, items, settings["id_field"], report=record)
     table = markdown_table(summarise(outcomes))
-    model = config["vectordb"]["encoder_model"]
-    (args.output / f"summary-{stamp}.md").write_text(f"{table}\n\nEncoder: {model}\n")
+    (args.output / f"summary-{stamp}.md").write_text(f"{table}\n")
     print(table)
     print(f"\noutcomes: {raw}", file=sys.stderr)

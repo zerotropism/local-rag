@@ -5,7 +5,7 @@ import argparse
 from local_rag.chatbot import Chatbot
 from local_rag.config import load_config, resolve
 from local_rag.corpus import load_csv
-from local_rag.embedders import SentenceTransformerEmbedder
+from local_rag.embedders import make_embedder
 from local_rag.models import Document
 from local_rag.protocols import VectorStore
 from local_rag.stores import QdrantStore
@@ -20,10 +20,13 @@ def load_documents(config: dict) -> list[Document]:
     )
 
 
-def build_dense_store(config: dict, documents: list[Document]) -> QdrantStore:
+def build_dense_store(
+    config: dict, documents: list[Document], encoder: str | None = None
+) -> QdrantStore:
+    """Index the documents with `encoder`, by default the one configured."""
     vectordb = config["vectordb"]
     store = QdrantStore(
-        SentenceTransformerEmbedder(vectordb["encoder_model"]),
+        make_embedder(encoder or vectordb["encoder"]),
         location=vectordb.get("location", ":memory:"),
         collection_name=vectordb["collection_name"],
     )

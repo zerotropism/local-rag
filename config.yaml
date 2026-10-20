@@ -6,7 +6,8 @@ evaluation:
   path: "data/eval.jsonl"
   id_field: "name"
 vectordb:
-  encoder_model: "all-MiniLM-L6-v2"
+  # "sentence-transformers:<model>" or "ollama:<model>"
+  encoder: "sentence-transformers:all-MiniLM-L6-v2"
   location: ":memory:"
   collection_name: "top_wines"
 chatbot:

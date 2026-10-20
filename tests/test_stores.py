@@ -29,6 +29,9 @@ class ToyEmbedder:
             vectors.append(vector)
         return vectors
 
+    def encode_query(self, text: str) -> list[float]:
+        return self.encode([text])[0]
+
 
 @pytest.fixture
 def store() -> QdrantStore:

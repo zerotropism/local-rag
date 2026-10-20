@@ -69,3 +69,24 @@ def test_the_cli_measures_bm25_on_the_bundled_data(tmp_path, capsys) -> None:
     assert "| lexical | all |" in table
     # the paraphrases share no content word with their wine: BM25 cannot find them
     assert "| lexical | paraphrase | 10 | 0.000 |" in table
+
+
+def test_dense_and_hybrid_are_built_once_per_encoder(monkeypatch) -> None:
+    from local_rag import cli
+    from local_rag.config import load_config
+    from local_rag.evaluation import build_retrievers
+
+    class Toy:
+        dimension = 4
+
+        def encode(self, texts):
+            return [[float(len(t)), 1.0, 0.0, 0.0] for t in texts]
+
+        def encode_query(self, text):
+            return self.encode([text])[0]
+
+    built = []
+    monkeypatch.setattr(cli, "make_embedder", lambda name: built.append(name) or Toy())
+    retrievers = build_retrievers(load_config(), ["lexical", "dense", "hybrid"], ["a:x", "b:y"])
+    assert built == ["a:x", "b:y"]
+    assert list(retrievers) == ["lexical", "dense a:x", "hybrid a:x", "dense b:y", "hybrid b:y"]
