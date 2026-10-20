@@ -48,7 +48,7 @@ class QdrantStore:
         """Uses query_points: the search method was removed in qdrant-client 1.19."""
         response = self._client.query_points(
             collection_name=self._collection_name,
-            query=self._embedder.encode([query])[0],
+            query=self._embedder.encode_query(query),
             limit=limit,
         )
         return [

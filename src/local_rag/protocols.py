@@ -16,7 +16,11 @@ class Embedder(Protocol):
         ...
 
     def encode(self, texts: Sequence[str]) -> list[list[float]]:
-        """Encode a batch. A single text is a batch of one."""
+        """Encode a batch of documents."""
+        ...
+
+    def encode_query(self, text: str) -> list[float]:
+        """Encode one query. Some models expect queries and documents to be marked apart."""
         ...
 
 
