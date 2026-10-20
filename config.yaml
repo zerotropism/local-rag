@@ -2,6 +2,8 @@ data:
   path: "data/top_rated_wines.csv"
   text_field: ["name", "region", "variety", "notes"]
   required_fields: ["variety"]
+# lexical (BM25, the default: best on the evaluation, no model), dense or hybrid
+retrieval: "lexical"
 evaluation:
   path: "data/eval.jsonl"
   id_field: "name"

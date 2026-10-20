@@ -3,7 +3,6 @@
 from collections.abc import Sequence
 
 import ollama
-from sentence_transformers import SentenceTransformer
 
 BACKENDS = ("sentence-transformers", "ollama")
 
@@ -16,15 +15,25 @@ PREFIXES = {
 
 
 class SentenceTransformerEmbedder:
-    """Local embeddings through sentence-transformers. The model is loaded once, on first use."""
+    """Local embeddings through sentence-transformers. The model is loaded once, on first use.
+
+    sentence-transformers pulls in torch: it is an optional extra, imported only here.
+    """
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
         self.model_name = model_name
-        self._model: SentenceTransformer | None = None
+        self._model = None
 
     @property
-    def model(self) -> SentenceTransformer:
+    def model(self):
         if self._model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError:
+                raise ImportError(
+                    "sentence-transformers is not installed: "
+                    "uv sync --extra sentence-transformers, or use an ollama: encoder"
+                ) from None
             self._model = SentenceTransformer(self.model_name)
         return self._model
 

@@ -6,9 +6,13 @@ from local_rag.chatbot import Chatbot
 from local_rag.config import load_config, resolve
 from local_rag.corpus import load_csv
 from local_rag.embedders import make_embedder
+from local_rag.hybrid import HybridRetriever
+from local_rag.lexical import BM25Index
 from local_rag.models import Document
-from local_rag.protocols import VectorStore
+from local_rag.protocols import Retriever
 from local_rag.stores import QdrantStore
+
+RETRIEVALS = ("lexical", "dense", "hybrid")
 
 
 def load_documents(config: dict) -> list[Document]:
@@ -34,16 +38,24 @@ def build_dense_store(
     return store
 
 
-def build_store(config: dict) -> VectorStore:
-    """Load the corpus and index it, reporting how many documents made it in."""
-    documents = load_documents(config)
-    print(f"Indexing {len(documents)} documents...")
-    store = build_dense_store(config, documents)
-    print(f"Collection '{config['vectordb']['collection_name']}' holds {store.count()} points.")
-    return store
+def build_retriever(config: dict, documents: list[Document] | None = None) -> Retriever:
+    """The configured retriever over the corpus: `retrieval` is lexical, dense or hybrid.
+
+    BM25 is the default: it ranked best on the evaluation and needs no model (README).
+    """
+    mode = config.get("retrieval", "lexical")
+    if mode not in RETRIEVALS:
+        raise ValueError(f"retrieval {mode!r}: expected one of {RETRIEVALS}")
+    documents = load_documents(config) if documents is None else documents
+    lexical = BM25Index()
+    lexical.index(documents)
+    if mode == "lexical":
+        return lexical
+    dense = build_dense_store(config, documents)
+    return dense if mode == "dense" else HybridRetriever([lexical, dense])
 
 
-def build_chatbot(config: dict, store: VectorStore) -> Chatbot:
+def build_chatbot(config: dict, store: Retriever) -> Chatbot:
     chatbot = config["chatbot"]
     return Chatbot(
         store=store,
@@ -74,7 +86,11 @@ def main() -> None:
         use_system_certificates()
 
     config = load_config(args.config)
-    build_chatbot(config, build_store(config)).run()
+    documents = load_documents(config)
+    print(
+        f"Indexing {len(documents)} documents ({config.get('retrieval', 'lexical')} retrieval)..."
+    )
+    build_chatbot(config, build_retriever(config, documents)).run()
 
 
 if __name__ == "__main__":
