@@ -1,4 +1,4 @@
-"""Retrieval-augmented conversation over any VectorStore."""
+"""Retrieval-augmented conversation over any Retriever."""
 
 from collections.abc import Callable, Sequence
 
@@ -12,9 +12,9 @@ DEFAULT_LIMIT = 3
 
 def ollama_chat(model: str, prompt: str) -> str:
     """Default chat backend. Injected, so the conversation can be tested without a server."""
-    return ollama.chat(model=model, messages=[{"role": "user", "content": prompt}])["message"][
-        "content"
-    ]
+    # think=False: reasoning models otherwise think for minutes before a short answer
+    messages = [{"role": "user", "content": prompt}]
+    return ollama.chat(model=model, messages=messages, think=False)["message"]["content"]
 
 
 def format_hits(hits: Sequence[SearchHit]) -> str:
@@ -79,5 +79,5 @@ class Chatbot:
 
             response, hits = self.answer(question)
             if show_hits:
-                print(f"\nVector DB search results:\n{format_hits(hits)}\n")
+                print(f"\nSearch results:\n{format_hits(hits)}\n")
             print("Chatbot:", response)
