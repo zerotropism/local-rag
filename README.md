@@ -38,7 +38,7 @@ evaluation:
   path: "data/eval.jsonl"
   id_field: "name"
 vectordb:
-  encoder_model: "all-MiniLM-L6-v2"
+  encoder: "sentence-transformers:all-MiniLM-L6-v2"   # or "ollama:<model>"
   location: ":memory:"
   collection_name: "top_wines"
 chatbot:
@@ -68,7 +68,7 @@ columns your corpus carries.
 src/local_rag/
 ├── models.py      Document (text + payload) and SearchHit
 ├── protocols.py   Embedder, Retriever and VectorStore
-├── embedders.py   SentenceTransformerEmbedder
+├── embedders.py   SentenceTransformerEmbedder, OllamaEmbedder, make_embedder("backend:model")
 ├── stores.py      QdrantStore
 ├── lexical.py     BM25Index, in memory
 ├── hybrid.py      HybridRetriever: reciprocal rank fusion of several retrievers
@@ -117,25 +117,53 @@ count once. Each question reports recall at 1, 5 and 10 (share of its relevant w
 its reciprocal rank; results are averaged per kind and overall.
 
 ```bash
-uv run local-rag-eval                          # the three retrievers; downloads the encoder once
+uv run local-rag-eval                          # the three retrievers, configured encoder
 uv run local-rag-eval --retrievers lexical     # BM25 only: no model, a few seconds
+uv run local-rag-eval --encoders sentence-transformers:all-MiniLM-L6-v2 ollama:nomic-embed-text
 ```
 
-Behind a TLS-inspecting proxy, add `--system-certs`. Each question's outcome, with its ranked
-wines, goes to `evaluation/outcomes-<time>.jsonl`, and the table to `summary-<time>.md`.
+`--encoders` measures the dense and hybrid retrievers once per encoder, in one run. An encoder
+is `sentence-transformers:<model>`, downloaded from Hugging Face on first use (add
+`--system-certs` behind a TLS-inspecting proxy), or `ollama:<model>`, served by a local Ollama
+after `ollama pull <model>`. Models trained with an instruction in front of queries or documents
+get it automatically: `nomic-embed-text` and `mxbai-embed-large`.
 
-BM25 on the bundled questions:
+Each question's outcome, with its ranked wines, goes to `evaluation/outcomes-<time>.jsonl`, and
+the table to `summary-<time>.md`.
 
-| Retriever | Questions | n | Recall@1 | Recall@5 | Recall@10 | MRR |
-|---|---|---|---|---|---|---|
-| lexical | all | 30 | 0.472 | 0.632 | 0.644 | 0.667 |
-| lexical | name | 10 | 0.566 | 0.896 | 0.933 | 1.000 |
-| lexical | notes | 10 | 0.850 | 1.000 | 1.000 | 1.000 |
-| lexical | paraphrase | 10 | 0.000 | 0.000 | 0.000 | 0.000 |
+Measured on 20 October 2026, three encoders in one run (`evaluation/summary-20261020T091626Z.md`
+holds every row, the `.jsonl` next to it every question). Mean reciprocal rank per kind of
+question:
 
-Recall@1 on `name` is capped below 1: those questions have several relevant vintages. The
-paraphrases score 0 by construction. The questions were written for this evaluation by one
-author: they compare the retrievers with each other, not with real users.
+| Retriever | Encoder | name | notes | paraphrase | all | Recall@10, all | ms / query |
+|---|---|---|---|---|---|---|---|
+| lexical | — | 1.000 | 1.000 | 0.000 | 0.667 | 0.644 | 1.6 |
+| dense | all-MiniLM-L6-v2 | 1.000 | 0.233 | 0.250 | 0.494 | 0.556 | 6 |
+| dense | nomic-embed-text | 1.000 | 0.250 | 0.061 | 0.437 | 0.500 | 18.4 |
+| dense | mxbai-embed-large | 0.933 | 0.089 | 0.183 | 0.402 | 0.533 | 35 |
+| hybrid | all-MiniLM-L6-v2 | 1.000 | 0.599 | 0.043 | 0.548 | 0.722 | 7.8 |
+| hybrid | nomic-embed-text | 1.000 | 0.506 | 0.048 | 0.518 | 0.661 | 19.4 |
+| hybrid | mxbai-embed-large | 1.000 | 0.589 | 0.046 | 0.545 | 0.672 | 38.5 |
+
+- BM25 ranks best overall, and no encoder beats it. The two larger encoders do worse than
+  `all-MiniLM-L6-v2`; `mxbai-embed-large` never ranks the wine described by its notes first
+  (recall@1 of 0). Every wine is described in the same vocabulary, and a whole tasting note
+  embedded as one vector says "a fine red wine" more than it says which one.
+- The dense retrievers are the only ones that find paraphrased descriptions, at best
+  `all-MiniLM-L6-v2`, with three in ten within its first ten hits.
+- Rank fusion finds the most relevant wines within ten (0.722) but ranks them lower than BM25
+  alone. BM25 always returns 50 hits, since common words such as "in" or "fruit" match hundreds
+  of wines; equal-weight fusion then lets a wine that both lists rank in the middle overtake one
+  that a single list ranks first. The chatbot passes its first three hits to the model, so the
+  first ranks are what matter.
+- Recall@1 on `name` is capped below 1: those questions have several relevant vintages. The
+  paraphrases score 0 with BM25 by construction.
+- The `all-MiniLM-L6-v2` and BM25 rows reproduce the 12 October run exactly.
+
+Decision: BM25 becomes the default retriever. It ranks best, needs no model and answers in two
+milliseconds; the dense and hybrid retrievers stay available for corpora where wording varies
+more. The questions were written for this evaluation by one author: they compare the
+retrievers with each other, not with real users, and the paraphrases were built to defeat BM25.
 
 ## Tests
 
@@ -153,6 +181,6 @@ BM25 on the bundled questions.
 |-------------------------|-----------------------------------------|
 | `qdrant-client`         | Vector store, in-memory or on a server  |
 | `sentence-transformers` | Local embeddings                        |
-| `ollama`                | Local chat model                        |
+| `ollama`                | Local chat model and embeddings         |
 | `pyyaml`                | Configuration                           |
 | `truststore`            | TLS verification against the OS store   |
