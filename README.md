@@ -1,10 +1,13 @@
 # local-rag
 
-A local retrieval-augmented chatbot: index a CSV corpus into a vector store, retrieve against a
-question, and let a local model answer from what was retrieved. Nothing leaves the machine.
+A local retrieval-augmented chatbot: index a CSV corpus, retrieve against a question, and let a
+local model answer from what was retrieved. Nothing leaves the machine. The same corpus is
+served to MCP clients as a `search` tool and an `ask` tool.
 
-The embedder and the vector store sit behind protocols, so either can be swapped without
-touching the other — and the corpus is configuration, not code. The shipped example is a wine
+Retrieval is BM25 by default, measured best on the bundled evaluation; a vector store and a
+fusion of both are a configuration line away. The embedder and the vector store sit behind
+protocols, so either can be swapped without touching the other — and the corpus is
+configuration, not code. The shipped example is a wine
 catalogue; pointing it at another CSV takes three lines of YAML.
 
 ## Installation
@@ -13,23 +16,29 @@ Requires Python 3.12+, [uv](https://docs.astral.sh/uv/) and a running [Ollama](h
 
 ```bash
 uv sync
-ollama pull gemma3:12b
+ollama pull llama3.2:3b
 uv run local-rag
 ```
 
-The first run downloads the embedding model from Hugging Face. Behind a TLS-inspecting
-corporate proxy, Python rejects the intercepted certificate while the system trust store accepts
-it; `--system-certs` makes verification use the OS trust store instead of the bundled one:
+BM25 needs no embedding model. The dense and hybrid retrievers need one: an Ollama model
+(`encoder: "ollama:nomic-embed-text"`), or sentence-transformers, an optional extra that brings
+torch and several gigabytes with it:
 
 ```bash
-uv run local-rag --system-certs
+uv sync --extra sentence-transformers
 ```
+
+sentence-transformers downloads its model from Hugging Face on first use. Behind a
+TLS-inspecting corporate proxy, Python rejects the intercepted certificate while the system
+trust store accepts it: `--system-certs` makes verification use the OS trust store. Once the
+model is cached, `HF_HUB_OFFLINE=1` skips Hugging Face entirely.
 
 ## Configuration
 
 `config.yaml` describes the corpus, the vector store and the chatbot:
 
 ```yaml
+retrieval: "lexical"    # lexical (BM25), dense or hybrid
 data:
   path: "data/top_rated_wines.csv"
   text_field: ["name", "region", "variety", "notes"]
@@ -46,7 +55,7 @@ chatbot:
   initial_template: >
     You are a wine specialist. Answer using only the search results provided below.
     Never mention a wine that is not in those results.
-  llm_model: "gemma3:12b"
+  llm_model: "llama3.2:3b"
 ```
 
 `text_field` accepts one column or several. Several columns are concatenated as `field: value`
@@ -73,10 +82,11 @@ src/local_rag/
 ├── lexical.py     BM25Index, in memory
 ├── hybrid.py      HybridRetriever: reciprocal rank fusion of several retrievers
 ├── evaluation.py  recall@k and MRR per retriever and kind of question, local-rag-eval
+├── server.py      MCP adapter: search and ask
 ├── corpus.py      CSV to Documents
 ├── config.py      YAML loading, root-relative paths
 ├── chatbot.py     retrieval, prompt building, conversation
-└── cli.py         entry point
+└── cli.py         chatbot entry point; builds the configured retriever
 ```
 
 `Document.payload` is what keeps the store corpus-agnostic: the store embeds `text` and returns
@@ -88,13 +98,9 @@ built rather than on a live answer.
 
 ## Retrieval quality
 
-The chatbot searches by vectors only for now: the question is embedded and compared by cosine
-similarity. On the wine catalogue this retrieves plausible neighbours but discriminates poorly
-on names and places, which a 384-dimension embedding of two hundred words of tasting notes
-blurs. The prompt compensates: the model answers only from the retrieved documents and says so
+`retrieval` in `config.yaml` picks one of three retrievers over the same documents. Whichever
+is used, the prompt asks the model to answer only from the retrieved documents and to say so
 when none fit.
-
-Three retrievers can be compared on the same documents:
 
 | Retriever | How it ranks |
 |---|---|
@@ -117,7 +123,7 @@ count once. Each question reports recall at 1, 5 and 10 (share of its relevant w
 its reciprocal rank; results are averaged per kind and overall.
 
 ```bash
-uv run local-rag-eval                          # the three retrievers, configured encoder
+uv run local-rag-eval                          # all three; this encoder needs the extra
 uv run local-rag-eval --retrievers lexical     # BM25 only: no model, a few seconds
 uv run local-rag-eval --encoders sentence-transformers:all-MiniLM-L6-v2 ollama:nomic-embed-text
 ```
@@ -160,10 +166,34 @@ question:
   paraphrases score 0 with BM25 by construction.
 - The `all-MiniLM-L6-v2` and BM25 rows reproduce the 12 October run exactly.
 
-Decision: BM25 becomes the default retriever. It ranks best, needs no model and answers in two
-milliseconds; the dense and hybrid retrievers stay available for corpora where wording varies
-more. The questions were written for this evaluation by one author: they compare the
-retrievers with each other, not with real users, and the paraphrases were built to defeat BM25.
+Decision: BM25 is the default retriever (`retrieval: "lexical"`). It ranks best, needs no
+model and answers in two milliseconds; the dense and hybrid retrievers stay available for
+corpora where wording varies more. The questions were written for this evaluation by one
+author: they compare the retrievers with each other, not with real users, and the paraphrases
+were built to defeat BM25.
+
+## MCP server
+
+`local-rag-mcp` indexes the configured corpus with the configured retriever, then serves it over
+stdio.
+
+| Tool | Returns |
+|---|---|
+| `search(query, k=5)` | the `k` closest documents (1 to 20), best first, each with its score and every field of its row |
+| `ask(question)` | the model's answer from the retrieved documents, and those documents |
+
+Both are read-only. Each `ask` is independent: no history is kept between calls. The model call
+runs in a worker thread and is cut off after `LOCAL_RAG_TIMEOUT` seconds (120 by default).
+With [mcp-servers-cli](https://pypi.org/project/mcp-servers-cli/):
+
+```bash
+uvx mcp-servers-cli call search '{"query": "Krug vintage champagne", "k": 3}' \
+  --stdio "uv run --directory $PWD local-rag-mcp"
+uvx mcp-servers-cli agent "Recommend a bold Barossa red and say why" --model qwen3.5:4b-mlx \
+  --stdio "uv run --directory $PWD local-rag-mcp"
+```
+
+`--config` points the server at another corpus; `--system-certs` is as for the chatbot.
 
 ## Tests
 
@@ -180,7 +210,8 @@ BM25 on the bundled questions.
 | Package                 | Role                                    |
 |-------------------------|-----------------------------------------|
 | `qdrant-client`         | Vector store, in-memory or on a server  |
-| `sentence-transformers` | Local embeddings                        |
+| `sentence-transformers` | Local embeddings (optional extra)       |
 | `ollama`                | Local chat model and embeddings         |
+| `fastmcp`               | MCP server                              |
 | `pyyaml`                | Configuration                           |
 | `truststore`            | TLS verification against the OS store   |
